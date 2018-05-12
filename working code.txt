@@ -1,79 +1,53 @@
-1. Data frequency (availability) bar graph - how many data points per WQ parameters (by Route 1 reference)
-2. Yearly time series (line graph) facet of each of the WQ parameters
-3. Seasonal facet (bar diagram) of each of the parameters by Route_1 reference
-4. Spatial modeling of each of the parameters (facet)
-5. Coffelation chart of each of the parameters
-6. PCA 
-7. Regression modeling of major parameters (Nitrate, Chloride, Lead)
-8. Summary table of each of the parameters (mean, max, min, SD)
+#Packages
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(gridExtra)
+library(dplyr)
+library(ggpubr)
+library(Hmisc)
+library(readxl)
+library(rgdal)
+library(gstat)
+library(sp)
+library(raster)
+library(mapview)
+library(sf)
 
+#Data importing and cleaning
+water <- read_excel("~/Desktop/bio/project/water.xlsx", na = " ") %>%
+  mutate_at(vars(Nitrite:VOC), as.numeric)
 
-Questions:
-1. How can I make a table of summary statistics in R (RMarndown)?
-2. Any suggestions for PCA (I used vegan package before)
-3. Reading data from my github?
+#Study area mapping using google open street map
+charlestown_bnd <- st_read("~/Desktop/bio/project/Municipalities_1997/Municipalities_1997.shp") %>% 
+  filter(NAME == "CHARLESTOWN") %>%
+  st_transform(crs = "+proj=utm +zone=19 +ellps=WGS84 +datum=WGS84 +no_defs") %>%
+  as("Spatial")
+water_sp <- SpatialPoints(water[,c("Long","Lat")], proj4string = CRS("+proj=longlat +datum=WGS84"))
+water_sp <- SpatialPointsDataFrame(water_sp, water)
+water_sp <- spTransform(water_sp, CRS(proj4string(charlestown_bnd)))
+mapview(water_sp) + charlestown_bnd
 
-
-kableExtra package (for table outputs)
-PCA 
-
-prcomp for pca and ggbiplot for graph of PCA
-
-
-scipy.com (python conference)
---------------------------------------------
-
-yearly_EC_counts <- water %>% group_by(year, Rt1_ref) %>%
-  tally
-ggplot(data = yearly_EC_counts, aes(x = Date, y = n, color = Rt1_ref, group = Rt1_ref)) +
-  geom_line() + theme_bw() +ylab('Number of Individuals') + xlab('Year')+ theme(axis.text.x = element_text(angle = 90))
-
-ggplot(water, aes(x=Coliform, y=Nitrate))+
-  geom_boxplot(alpha = 1,color='blue')+xlab('Coliform')+ylab('Nitrate (mg/L)')+
-  stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
-
-ggscatter(water, x = "EC", y = "TDS", color = "black", shape = 21, size = 2, add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson",  xlab = "EC (mS/cm)", ylab = "TDS (mg/L)")
-
-
-water <- read_excel("~/Desktop/bio/project/water.xlsx")
-water$Nitrite <- as.numeric(as.character(water$Nitrite))
-water$Nitrate <- as.numeric(as.character(water$Nitrate))
-water$pH <- as.numeric(as.character(water$pH))
-water$Odor <- as.numeric(as.character(water$Odor))
-water$Turbidity <- as.numeric(as.character(water$Turbidity))
-water$Iron <- as.numeric(as.character(water$Iron))
-water$Manganese <- as.numeric(as.character(water$Manganese))
-water$Hardness <- as.numeric(as.character(water$Hardness))
-water$Sodium <- as.numeric(as.character(water$Sodium))
-water$Chloride <- as.numeric(as.character(water$Chloride))
-water$Sulfate <- as.numeric(as.character(water$Sulfate))
-water$Alkalinity <- as.numeric(as.character(water$Alkalinity))
-water$Fluoride <- as.numeric(as.character(water$Fluoride))
-water$TDS <- as.numeric(as.character(water$TDS))
-water$EC <- as.numeric(as.character(water$EC))
-water$Lead <- as.numeric(as.character(water$Lead))
-water$VOC <- as.numeric(as.character(water$VOC))
-water$E_coli <- as.numeric(as.character(water$E_coli))
-
-#Number of water samples collected every year
+#Data availability assessment
 ggplot(water) + stat_count(aes(x = Year, fill =Rt1_ref ), position = "dodge")+ylab('Number of samples')+xlab('Year')+theme(axis.text.x = element_text(angle = 90))+scale_x_continuous(breaks=seq(2008, 2017, 1))
 
-#Electrical conductivity value in below and above the route 1 road
-ggplot(water, aes(x=Rt1_ref, y=EC))+ geom_boxplot(alpha = 1,color='blue')+xlab('From Route - 1')+ylab('Electrical conductivity (µS/cm)')+  stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
+#TDS value below and above Route-1 hightwy
+ggplot(water, aes(x=Rt1_ref, y=TDS))+ geom_boxplot(alpha = 1,color='blue')+xlab('From Route - 1')+ylab('Total dissolved solids (mg/L)')+  stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
 
+#Monthly average value of TDS
+water$Month<-as.character(as.numeric(water$Month))
+ggplot(water, aes(x=Month, y=TDS))+ geom_boxplot(alpha = 1,color='blue')+xlab('Months')+ylab('Total dissolved solids (mg/L)')+ stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
+ 
+#Yearly distribution of TDS
+water$Year<-as.character(as.numeric(water$Year))
+water_2010<-water[ which(water$Year>2010),]
+ggplot(water_2010, aes(x=Year, y=TDS))+ geom_boxplot(alpha = 1,color='black')+xlab('Year')+ylab('Total dissolved solids (mg/L)')+ stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()+geom_smooth(method="lm", se=FALSE, color="blue", aes(group=1))
 
-# Monthly avarage value of TDS
-ggplot(water, aes(x=Month, y=TDS))+geom_boxplot(alpha = 1,color='blue')+xlab('Months')+ylab('Total dissolved solids (mg/L)'+   stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
+#Relationship between TDS and chloride content
+ggscatter(water, x = "TDS", y = "Chloride", color = "black", shape = 21, size = 2, add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson",  ylab = "Chloride (mg/L)", xlab = "TDS (mg/L)")
 
-#Relationship between EC and Chloride
-ggscatter(water, x = "EC", y = "Chloride", color = "black", shape = 21, size = 2, add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson",  ylab = "Chloride (mg/L)", xlab = "EC (µS/cm)")
+c4 <- cor.test(water$EC,water$Chloride)
 
-#Relationship between TDS and Coliform present
-ggplot(water, aes(x=Coliform, y=TDS))+
-  geom_boxplot(alpha = 1,color='blue')+xlab('Coliform presense/absence')+ylab('Total Dissolved Solids (mg/L)')+
-  stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
-
-
+#Relationship between TDS and coliform detection
 ggplot(water, aes(x=Coliform, y=TDS))+
   geom_boxplot(alpha = 1,color='blue')+xlab('Coliform presense/absence')+ylab('Total Dissolved Solids (mg/L)')+ stat_summary(fun.y=mean, color="red", geom="point", shape=15, size=1,show_guide = T, show.legend = T) + theme_bw()
- 
